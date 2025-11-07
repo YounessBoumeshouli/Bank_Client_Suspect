@@ -1,0 +1,42 @@
+
+services:
+  # 1. Votre application Python (Streamlit + PySpark Driver)
+  app:
+    build: .  # Construit à partir du Dockerfile dans le même dossier
+    ports:
+      - "8501:8501"  # Port pour Streamlit
+    volumes:
+      - .:/app  # Synchronise votre code local avec le conteneur
+    depends_on:
+      - spark-master
+      - mongo
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - MONGO_URL=mongodb://mongo:27017/
+    command: streamlit run main.py  --server.fileWatcherType=poll # Commande pour démarrer Streamlit
+
+  # 2. Le "Master" Apache Spark
+  spark-master:
+    image: docker.io/apache/spark:3.5.0
+    ports:
+      - "8080:8080"  # UI Web de Spark
+      - "7077:7077"  # Port du cluster
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    volumes: # <-- for finding the file that i added
+      - .:/app
+
+
+  # 3. Un "Worker" Apache Spark
+  spark-worker:
+    image: docker.io/apache/spark:3.5.0
+    depends_on:
+      - spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    volumes: # <-- for finding the files that I've added
+      - .:/app
+  # 4. La base de données MongoDB
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017" # Port standard de MongoDB
+    restart: unless-stopped
